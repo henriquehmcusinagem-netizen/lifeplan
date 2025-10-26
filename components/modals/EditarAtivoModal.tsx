@@ -78,7 +78,7 @@ export function EditarAtivoModal({ isOpen, onClose, ativo, onSuccess }: EditarAt
   // Preencher formulário com dados do ativo
   useEffect(() => {
     if (ativo && isOpen) {
-      reset(ativo);
+      reset(ativo as any);
     }
   }, [ativo, isOpen, reset]);
 
