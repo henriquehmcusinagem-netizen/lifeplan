@@ -330,6 +330,7 @@ export default function ObjetivosPageExample() {
               {objectives.map((objective) => (
                 <div key={objective.id} className="relative group">
                   <ObjectiveCard
+                    id={objective.id}
                     title={objective.title}
                     icon={objective.icon}
                     current={objective.current}
