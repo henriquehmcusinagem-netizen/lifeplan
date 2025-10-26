@@ -29,3 +29,10 @@ export function exportPatrimonioToExcel(ativos: any[]) {
   XLSX.utils.book_append_sheet(wb, ws, 'Patrimônio');
   XLSX.writeFile(wb, 'lifeplan-patrimonio.xlsx');
 }
+
+export function exportAnalisesToExcel(dadosMensais: any[]) {
+  const ws = XLSX.utils.json_to_sheet(dadosMensais);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Análise Mensal');
+  XLSX.writeFile(wb, 'lifeplan-analises.xlsx');
+}

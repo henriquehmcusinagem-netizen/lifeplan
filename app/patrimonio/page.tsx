@@ -4,13 +4,15 @@ import { AppLayout } from '@/components/AppLayout';
 import { StatCard } from '@/components/StatCard';
 import { Badge } from '@/components/Badge';
 import { AlertCard } from '@/components/AlertCard';
-import { NovoAtivoModal } from '@/components/modals';
+import { NovoAtivoModal, EditarAtivoModal } from '@/components/modals';
 import { Home, TrendingUp, Car, Plus, Edit, DollarSign, Building2 } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { useAtivos } from '@/hooks/useAtivos';
 
 export default function PatrimonioPage() {
   const [isNovoAtivoModalOpen, setIsNovoAtivoModalOpen] = useState(false);
+  const [isEditarAtivoModalOpen, setIsEditarAtivoModalOpen] = useState(false);
+  const [ativoSelecionado, setAtivoSelecionado] = useState<any>(null);
 
   const { ativos, loading, error, refetch } = useAtivos();
 
@@ -95,6 +97,42 @@ export default function PatrimonioPage() {
   const handleModalClose = () => {
     setIsNovoAtivoModalOpen(false);
     refetch(); // Atualizar lista de ativos
+  };
+
+  // Handler para editar ativo
+  const handleEditarAtivo = (ativo: any) => {
+    const metadados = ativo.metadados || {};
+
+    // Converter do formato do banco para o formato do formulário
+    const ativoFormatado = {
+      id: ativo.id,
+      tipo: ativo.tipo,
+      nome: ativo.nome,
+      valorEstimado: Number(ativo.valor_estimado),
+      vendabilidade: ativo.vendabilidade,
+      descricao: ativo.descricao,
+      // Campos específicos de imóvel
+      endereco: metadados.endereco,
+      tipoImovel: metadados.tipoImovel,
+      metragem: metadados.metragem,
+      ano: metadados.ano,
+      // Campos específicos de veículo
+      tipoVeiculo: metadados.tipoVeiculo,
+      modelo: metadados.modelo,
+      placa: metadados.placa,
+      // Campos específicos de investimento
+      tipoInvestimento: metadados.tipoInvestimento,
+      instituicao: metadados.instituicao,
+      rentabilidadeAnual: metadados.rentabilidadeAnual,
+    };
+
+    setAtivoSelecionado(ativoFormatado);
+    setIsEditarAtivoModalOpen(true);
+  };
+
+  // Handler para success do modal de edição
+  const handleEditSuccess = () => {
+    refetch();
   };
 
   return (
@@ -254,7 +292,10 @@ export default function PatrimonioPage() {
 
                           {/* Actions */}
                           <div className="flex gap-3">
-                            <button className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2">
+                            <button
+                              onClick={() => handleEditarAtivo(imovel)}
+                              className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
+                            >
                               <Edit className="w-4 h-4" />
                               Editar
                             </button>
@@ -325,7 +366,10 @@ export default function PatrimonioPage() {
 
                           {/* Actions */}
                           <div className="flex gap-3">
-                            <button className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2">
+                            <button
+                              onClick={() => handleEditarAtivo(investimento)}
+                              className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
+                            >
                               <Edit className="w-4 h-4" />
                               Editar
                             </button>
@@ -404,7 +448,10 @@ export default function PatrimonioPage() {
 
                           {/* Actions */}
                           <div className="flex gap-3">
-                            <button className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2">
+                            <button
+                              onClick={() => handleEditarAtivo(veiculo)}
+                              className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
+                            >
                               <Edit className="w-4 h-4" />
                               Editar
                             </button>
@@ -424,6 +471,19 @@ export default function PatrimonioPage() {
         isOpen={isNovoAtivoModalOpen}
         onClose={handleModalClose}
       />
+
+      {/* Modal Editar Ativo */}
+      {ativoSelecionado && (
+        <EditarAtivoModal
+          isOpen={isEditarAtivoModalOpen}
+          onClose={() => {
+            setIsEditarAtivoModalOpen(false);
+            setAtivoSelecionado(null);
+          }}
+          ativo={ativoSelecionado}
+          onSuccess={handleEditSuccess}
+        />
+      )}
     </AppLayout>
   );
 }

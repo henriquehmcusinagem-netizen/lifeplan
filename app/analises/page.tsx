@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { AppLayout } from '@/components/AppLayout';
 import { StatCard } from '@/components/StatCard';
 import { ExportButton } from '@/components/ExportButton';
@@ -14,6 +15,8 @@ import {
 } from 'lucide-react';
 import { generateAnalisesPDF } from '@/lib/export-pdf';
 import { exportToPDF } from '@/lib/export-pdf';
+import { exportAnalisesToExcel } from '@/lib/export-excel';
+import { useLancamentos } from '@/hooks/useLancamentos';
 import {
   LineChart,
   Line,
@@ -30,81 +33,190 @@ import {
   Bar
 } from 'recharts';
 
-// Dados mensais de 2025
-const dadosMensais = [
-  { mes: 'Jan', receitas: 0, despesas: 0, resultado: 0 },
-  { mes: 'Fev', receitas: 0, despesas: 0, resultado: 0 },
-  { mes: 'Mar', receitas: 11600, despesas: 11600, resultado: 0 },
-  { mes: 'Abr', receitas: 17680, despesas: 13221, resultado: 4459 },
-  { mes: 'Mai', receitas: 11600, despesas: 11600, resultado: 0 },
-  { mes: 'Jun', receitas: 11600, despesas: 11600, resultado: 0 },
-  { mes: 'Jul', receitas: 11600, despesas: 14160, resultado: -2560 },
-  { mes: 'Ago', receitas: 11600, despesas: 13879, resultado: -2221 },
-  { mes: 'Set', receitas: 11600, despesas: 13258, resultado: -1658 },
-  { mes: 'Out', receitas: 17680, despesas: 13121, resultado: 4559 },
-  { mes: 'Nov', receitas: 17680, despesas: 12563, resultado: 5117 },
-  { mes: 'Dez', receitas: 21219, despesas: 19520, resultado: 1699 },
-];
+const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
-// Dados trimestrais
-const dadosTrimestrais = [
-  { trimestre: '1º Trimestre', resultado: 0, margem: 0, positivo: false },
-  { trimestre: '2º Trimestre', resultado: 4459, margem: 9.8, positivo: true },
-  { trimestre: '3º Trimestre', resultado: -6439, margem: -13.9, positivo: false },
-  { trimestre: '4º Trimestre', resultado: 11375, margem: 18.1, positivo: true },
-];
-
-// Dados de distribuição de despesas
-const distribuicaoDespesas = [
-  { categoria: 'Gastos Fixos', valor: 18, cor: '#3b82f6' },
-  { categoria: 'Alimentação', valor: 25, cor: '#10b981' },
-  { categoria: 'Transporte', valor: 15, cor: '#f59e0b' },
-  { categoria: 'Outros', valor: 42, cor: '#8b5cf6' },
-];
-
-// Insights
-const insights = [
-  {
-    titulo: 'Recuperação no 2º Semestre',
-    descricao: 'O 2º semestre foi significativamente mais lucrativo que o 1º semestre, com destaque para o 4º trimestre (18.1% de margem).',
-    tipo: 'success'
-  },
-  {
-    titulo: 'Trimestre Crítico',
-    descricao: 'O 3º trimestre teve o pior desempenho com prejuízo de R$ 6.439 (-13.9% margem). Revisar despesas deste período.',
-    tipo: 'warning'
-  },
-  {
-    titulo: 'Crescimento de Receitas',
-    descricao: 'Receitas aumentaram nos meses de abril, outubro, novembro e dezembro, indicando sazonalidade positiva no final do ano.',
-    tipo: 'info'
-  },
-  {
-    titulo: 'Oportunidade de Otimização',
-    descricao: 'Categoria "Outros" representa 42% das despesas. Há potencial para redução e categorização mais específica.',
-    tipo: 'info'
-  },
-];
+const CORES_CATEGORIAS: Record<string, string> = {
+  'Gastos Fixos': '#3b82f6',
+  'Alimentação': '#10b981',
+  'Transporte': '#f59e0b',
+  'Lazer': '#8b5cf6',
+  'Saúde': '#ec4899',
+  'Educação': '#14b8a6',
+  'Outros': '#6b7280',
+};
 
 export default function AnalisesPage() {
-  // Totais do ano
-  const receitasTotal = 154459;
-  const despesasTotal = 140363;
-  const resultadoTotal = 14096;
-  const margem = 9.1;
+  const { lancamentos, loading } = useLancamentos();
+  const anoAtual = new Date().getFullYear();
+
+  // Processar dados dos lançamentos
+  const dadosProcessados = useMemo(() => {
+    // Filtrar lançamentos do ano atual
+    const lancamentosAno = lancamentos.filter(l => {
+      const data = new Date(l.data);
+      return data.getFullYear() === anoAtual;
+    });
+
+    // Calcular dados mensais
+    const dadosMensais = MESES.map((mes, index) => {
+      const lancamentosMes = lancamentosAno.filter(l => {
+        const data = new Date(l.data);
+        return data.getMonth() === index;
+      });
+
+      const receitas = lancamentosMes
+        .filter(l => l.tipo === 'receita')
+        .reduce((sum, l) => sum + Number(l.valor), 0);
+
+      const despesas = lancamentosMes
+        .filter(l => l.tipo === 'despesa')
+        .reduce((sum, l) => sum + Number(l.valor), 0);
+
+      return {
+        mes,
+        receitas,
+        despesas,
+        resultado: receitas - despesas
+      };
+    });
+
+    // Calcular totais do ano
+    const receitasTotal = dadosMensais.reduce((sum, m) => sum + m.receitas, 0);
+    const despesasTotal = dadosMensais.reduce((sum, m) => sum + m.despesas, 0);
+    const resultadoTotal = receitasTotal - despesasTotal;
+    const margem = receitasTotal > 0 ? (resultadoTotal / receitasTotal) * 100 : 0;
+
+    // Calcular dados trimestrais
+    const dadosTrimestrais = [
+      { trimestre: '1º Trimestre', meses: [0, 1, 2] },
+      { trimestre: '2º Trimestre', meses: [3, 4, 5] },
+      { trimestre: '3º Trimestre', meses: [6, 7, 8] },
+      { trimestre: '4º Trimestre', meses: [9, 10, 11] },
+    ].map(t => {
+      const receitas = t.meses.reduce((sum, m) => sum + dadosMensais[m].receitas, 0);
+      const despesas = t.meses.reduce((sum, m) => sum + dadosMensais[m].despesas, 0);
+      const resultado = receitas - despesas;
+      const margemTrimestre = receitas > 0 ? (resultado / receitas) * 100 : 0;
+
+      return {
+        trimestre: t.trimestre,
+        resultado,
+        margem: Number(margemTrimestre.toFixed(1)),
+        positivo: resultado >= 0
+      };
+    });
+
+    // Calcular distribuição de despesas por categoria
+    const despesasPorCategoria: Record<string, number> = {};
+    lancamentosAno
+      .filter(l => l.tipo === 'despesa')
+      .forEach(l => {
+        const categoria = l.categoria || 'Outros';
+        despesasPorCategoria[categoria] = (despesasPorCategoria[categoria] || 0) + Number(l.valor);
+      });
+
+    const distribuicaoDespesas = Object.entries(despesasPorCategoria)
+      .map(([categoria, valor]) => ({
+        categoria,
+        valor: despesasTotal > 0 ? Number(((valor / despesasTotal) * 100).toFixed(1)) : 0,
+        cor: CORES_CATEGORIAS[categoria] || CORES_CATEGORIAS['Outros']
+      }))
+      .sort((a, b) => b.valor - a.valor);
+
+    // Gerar insights automáticos
+    const insights = [];
+
+    // Insight sobre resultado anual
+    if (resultadoTotal > 0) {
+      insights.push({
+        titulo: 'Resultado Positivo no Ano',
+        descricao: `Você teve um saldo positivo de R$ ${resultadoTotal.toLocaleString('pt-BR')} em ${anoAtual}, com margem de ${margem.toFixed(1)}%.`,
+        tipo: 'success'
+      });
+    } else if (resultadoTotal < 0) {
+      insights.push({
+        titulo: 'Atenção: Resultado Negativo',
+        descricao: `Suas despesas superaram as receitas em R$ ${Math.abs(resultadoTotal).toLocaleString('pt-BR')} em ${anoAtual}. Revise seus gastos.`,
+        tipo: 'warning'
+      });
+    }
+
+    // Insight sobre melhor trimestre
+    const melhorTrimestre = dadosTrimestrais.reduce((max, t) => t.resultado > max.resultado ? t : max);
+    if (melhorTrimestre.resultado > 0) {
+      insights.push({
+        titulo: `Melhor Desempenho: ${melhorTrimestre.trimestre}`,
+        descricao: `O ${melhorTrimestre.trimestre} foi o mais lucrativo com R$ ${melhorTrimestre.resultado.toLocaleString('pt-BR')} (${melhorTrimestre.margem}% de margem).`,
+        tipo: 'success'
+      });
+    }
+
+    // Insight sobre pior trimestre
+    const piorTrimestre = dadosTrimestrais.reduce((min, t) => t.resultado < min.resultado ? t : min);
+    if (piorTrimestre.resultado < 0) {
+      insights.push({
+        titulo: `Trimestre Crítico: ${piorTrimestre.trimestre}`,
+        descricao: `O ${piorTrimestre.trimestre} teve prejuízo de R$ ${Math.abs(piorTrimestre.resultado).toLocaleString('pt-BR')}. Revise despesas deste período.`,
+        tipo: 'warning'
+      });
+    }
+
+    // Insight sobre maior categoria de despesa
+    if (distribuicaoDespesas.length > 0) {
+      const maiorCategoria = distribuicaoDespesas[0];
+      insights.push({
+        titulo: `Maior Despesa: ${maiorCategoria.categoria}`,
+        descricao: `A categoria "${maiorCategoria.categoria}" representa ${maiorCategoria.valor}% das suas despesas. ${maiorCategoria.valor > 30 ? 'Há potencial para otimização.' : 'Está dentro do esperado.'}`,
+        tipo: maiorCategoria.valor > 30 ? 'warning' : 'info'
+      });
+    }
+
+    return {
+      dadosMensais,
+      dadosTrimestrais,
+      distribuicaoDespesas,
+      receitasTotal,
+      despesasTotal,
+      resultadoTotal,
+      margem,
+      insights
+    };
+  }, [lancamentos, anoAtual]);
 
   const handleExportExcel = () => {
-    // Para Excel, você pode exportar os dados de análises estruturados
-    console.log('Exportar análises para Excel');
+    const dadosExport = dadosProcessados.dadosMensais.map(m => ({
+      'Mês': m.mes,
+      'Receitas': m.receitas,
+      'Despesas': m.despesas,
+      'Resultado': m.resultado
+    }));
+
+    exportAnalisesToExcel(dadosExport);
   };
 
   const handleExportPDF = () => {
     generateAnalisesPDF({
-      receitas: receitasTotal,
-      despesas: despesasTotal,
-      resultado: resultadoTotal
+      receitas: dadosProcessados.receitasTotal,
+      despesas: dadosProcessados.despesasTotal,
+      resultado: dadosProcessados.resultadoTotal
     });
   };
+
+  if (loading) {
+    return (
+      <AppLayout
+        title="Análises"
+        subtitle="Inteligência financeira e métricas estratégicas"
+      >
+        <div className="p-4 lg:p-8 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Carregando análises...</p>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout
@@ -124,27 +236,27 @@ export default function AnalisesPage() {
         {/* Cards de Resumo */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-6 lg:mb-8">
             <StatCard
-              label="Resultado 2025"
-              value={`R$ ${resultadoTotal.toLocaleString('pt-BR')}`}
+              label={`Resultado ${anoAtual}`}
+              value={`R$ ${dadosProcessados.resultadoTotal.toLocaleString('pt-BR')}`}
               icon={<TrendingUp className="w-6 h-6" />}
-              variant="success"
+              variant={dadosProcessados.resultadoTotal >= 0 ? "success" : "danger"}
             />
 
             <StatCard
               label="Receitas"
-              value={`R$ ${receitasTotal.toLocaleString('pt-BR')}`}
+              value={`R$ ${dadosProcessados.receitasTotal.toLocaleString('pt-BR')}`}
               icon={<DollarSign className="w-6 h-6" />}
             />
 
             <StatCard
               label="Despesas"
-              value={`R$ ${despesasTotal.toLocaleString('pt-BR')}`}
+              value={`R$ ${dadosProcessados.despesasTotal.toLocaleString('pt-BR')}`}
               icon={<TrendingDown className="w-6 h-6" />}
             />
 
             <StatCard
               label="Margem"
-              value={`${margem}%`}
+              value={`${dadosProcessados.margem.toFixed(1)}%`}
               icon={<Percent className="w-6 h-6" />}
             />
           </div>
@@ -157,7 +269,7 @@ export default function AnalisesPage() {
             </div>
 
             <ResponsiveContainer width="100%" height={400}>
-              <LineChart data={dadosMensais}>
+              <LineChart data={dadosProcessados.dadosMensais}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis
                   dataKey="mes"
@@ -218,7 +330,7 @@ export default function AnalisesPage() {
             <h2 className="text-lg lg:text-xl font-semibold text-gray-900 mb-3 lg:mb-4">ANÁLISE TRIMESTRAL</h2>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
-              {dadosTrimestrais.map((trimestre, index) => (
+              {dadosProcessados.dadosTrimestrais.map((trimestre, index) => (
                 <div key={index} className="card">
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-sm font-medium text-gray-500">{trimestre.trimestre}</p>
@@ -258,7 +370,7 @@ export default function AnalisesPage() {
                 <ResponsiveContainer width="100%" height={250}>
                   <PieChart>
                     <Pie
-                      data={distribuicaoDespesas}
+                      data={dadosProcessados.distribuicaoDespesas}
                       cx="50%"
                       cy="50%"
                       labelLine={false}
@@ -267,7 +379,7 @@ export default function AnalisesPage() {
                       fill="#8884d8"
                       dataKey="valor"
                     >
-                      {distribuicaoDespesas.map((entry, index) => (
+                      {dadosProcessados.distribuicaoDespesas.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.cor} />
                       ))}
                     </Pie>
@@ -284,7 +396,7 @@ export default function AnalisesPage() {
 
                 {/* Legenda com barras */}
                 <div className="w-full mt-4 space-y-3">
-                  {distribuicaoDespesas.map((item, index) => (
+                  {dadosProcessados.distribuicaoDespesas.map((item, index) => (
                     <div key={index} className="flex items-center gap-3">
                       <div
                         className="w-4 h-4 rounded"
@@ -319,7 +431,7 @@ export default function AnalisesPage() {
               </div>
 
               <div className="space-y-4">
-                {insights.map((insight, index) => (
+                {dadosProcessados.insights.map((insight, index) => (
                   <div
                     key={index}
                     className={`p-4 rounded-lg border-l-4 ${

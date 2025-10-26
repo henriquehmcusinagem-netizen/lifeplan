@@ -5,6 +5,7 @@ import { Badge } from './Badge';
 import { formatCurrency } from '@/lib/utils';
 
 interface ObjectiveCardProps {
+  id: string;
   title: string;
   icon: string;
   current: number;
@@ -12,9 +13,12 @@ interface ObjectiveCardProps {
   priority: number;
   timeRemaining: string;
   recommendation?: string;
+  onEdit?: () => void;
+  onViewScenarios?: () => void;
 }
 
 export function ObjectiveCard({
+  id,
   title,
   icon,
   current,
@@ -22,6 +26,8 @@ export function ObjectiveCard({
   priority,
   timeRemaining,
   recommendation,
+  onEdit,
+  onViewScenarios,
 }: ObjectiveCardProps) {
   const stars = '⭐'.repeat(Math.round(priority / 2));
 
@@ -63,10 +69,16 @@ export function ObjectiveCard({
 
       {/* Actions */}
       <div className="flex gap-2">
-        <button className="flex-1 px-4 py-2 bg-primary-600 dark:bg-primary-500 text-white text-sm font-medium rounded-lg hover:bg-primary-700 dark:hover:bg-primary-600 transition-colors">
+        <button
+          onClick={onViewScenarios}
+          className="flex-1 px-4 py-2 bg-primary-600 dark:bg-primary-500 text-white text-sm font-medium rounded-lg hover:bg-primary-700 dark:hover:bg-primary-600 transition-colors"
+        >
           Ver Cenários
         </button>
-        <button className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+        <button
+          onClick={onEdit}
+          className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+        >
           Editar
         </button>
       </div>

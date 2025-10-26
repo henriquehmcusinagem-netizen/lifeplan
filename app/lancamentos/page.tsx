@@ -38,6 +38,12 @@ export default function LancamentosPage() {
   const [lancamentoSelecionado, setLancamentoSelecionado] = useState<Lancamento | null>(null);
   const [anoSelecionado, setAnoSelecionado] = useState(2025);
 
+  // Estados dos filtros
+  const [mesSelecionado, setMesSelecionado] = useState<number | ''>(''); // 0-11 ou '' para todos
+  const [tipoSelecionado, setTipoSelecionado] = useState<'receita' | 'despesa' | ''>('');
+  const [categoriaSelecionada, setCategoriaSelecionada] = useState<string>('');
+  const [termoBusca, setTermoBusca] = useState('');
+
   // Buscar dados do Supabase
   const { lancamentos, loading, error, refetch } = useLancamentos();
 
@@ -54,10 +60,26 @@ export default function LancamentosPage() {
       };
     }
 
-    // Filtrar lançamentos do ano selecionado
+    // Filtrar lançamentos do ano selecionado e aplicar filtros
     const lancamentosAno = lancamentos.filter(l => {
       const dataLancamento = new Date(l.data);
-      return dataLancamento.getFullYear() === anoSelecionado;
+
+      // Filtro por ano
+      if (dataLancamento.getFullYear() !== anoSelecionado) return false;
+
+      // Filtro por mês
+      if (mesSelecionado !== '' && dataLancamento.getMonth() !== mesSelecionado) return false;
+
+      // Filtro por tipo
+      if (tipoSelecionado !== '' && l.tipo !== tipoSelecionado) return false;
+
+      // Filtro por categoria
+      if (categoriaSelecionada !== '' && l.categoria !== categoriaSelecionada) return false;
+
+      // Filtro por busca (descricao)
+      if (termoBusca && !l.descricao.toLowerCase().includes(termoBusca.toLowerCase())) return false;
+
+      return true;
     });
 
     // Array de meses
@@ -133,7 +155,7 @@ export default function LancamentosPage() {
       totalDespesas,
       totalResultado: totalReceitas - totalDespesas,
     };
-  }, [lancamentos, anoSelecionado]);
+  }, [lancamentos, anoSelecionado, mesSelecionado, tipoSelecionado, categoriaSelecionada, termoBusca]);
 
   const {
     resumoMensal,
@@ -294,22 +316,109 @@ export default function LancamentosPage() {
             />
           </div>
 
-          {/* Actions */}
-          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 mb-4 lg:mb-6">
-            <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
-              <button className="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2">
-                <Filter className="w-4 h-4" />
-                Filtrar
-              </button>
-              <select
-                className="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
-                value={anoSelecionado}
-                onChange={(e) => setAnoSelecionado(Number(e.target.value))}
-              >
-                <option value={2025}>2025</option>
-                <option value={2024}>2024</option>
-                <option value={2023}>2023</option>
-              </select>
+          {/* Filtros e Actions */}
+          <div className="card mb-4 lg:mb-6">
+            <div className="flex flex-col lg:flex-row lg:items-center gap-3 lg:gap-4 mb-4">
+              <Filter className="w-5 h-5 text-primary-600 hidden lg:block" />
+              <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {/* Filtro Ano */}
+                <select
+                  className="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  value={anoSelecionado}
+                  onChange={(e) => setAnoSelecionado(Number(e.target.value))}
+                >
+                  <option value={2025}>Ano: 2025</option>
+                  <option value={2024}>Ano: 2024</option>
+                  <option value={2023}>Ano: 2023</option>
+                </select>
+
+                {/* Filtro Mês */}
+                <select
+                  className="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  value={mesSelecionado}
+                  onChange={(e) => setMesSelecionado(e.target.value === '' ? '' : Number(e.target.value))}
+                >
+                  <option value="">Todos os meses</option>
+                  <option value={0}>Janeiro</option>
+                  <option value={1}>Fevereiro</option>
+                  <option value={2}>Março</option>
+                  <option value={3}>Abril</option>
+                  <option value={4}>Maio</option>
+                  <option value={5}>Junho</option>
+                  <option value={6}>Julho</option>
+                  <option value={7}>Agosto</option>
+                  <option value={8}>Setembro</option>
+                  <option value={9}>Outubro</option>
+                  <option value={10}>Novembro</option>
+                  <option value={11}>Dezembro</option>
+                </select>
+
+                {/* Filtro Tipo */}
+                <select
+                  className="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  value={tipoSelecionado}
+                  onChange={(e) => setTipoSelecionado(e.target.value as 'receita' | 'despesa' | '')}
+                >
+                  <option value="">Tipo: Todos</option>
+                  <option value="receita">Receitas</option>
+                  <option value="despesa">Despesas</option>
+                </select>
+
+                {/* Filtro Categoria */}
+                <select
+                  className="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  value={categoriaSelecionada}
+                  onChange={(e) => setCategoriaSelecionada(e.target.value)}
+                >
+                  <option value="">Categoria: Todas</option>
+                  {tipoSelecionado === 'receita' && categoriasReceita.map(c => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
+                  {tipoSelecionado === 'despesa' && categoriasDespesa.map(c => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
+                  {tipoSelecionado === '' && (
+                    <>
+                      <optgroup label="Receitas">
+                        {categoriasReceita.map(c => (
+                          <option key={c.value} value={c.value}>{c.label}</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Despesas">
+                        {categoriasDespesa.map(c => (
+                          <option key={c.value} value={c.value}>{c.label}</option>
+                        ))}
+                      </optgroup>
+                    </>
+                  )}
+                </select>
+              </div>
+
+              {/* Campo de Busca */}
+              <div className="relative w-full lg:w-64">
+                <input
+                  type="text"
+                  placeholder="Buscar por descrição..."
+                  value={termoBusca}
+                  onChange={(e) => setTermoBusca(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* Limpar Filtros */}
+              {(mesSelecionado !== '' || tipoSelecionado !== '' || categoriaSelecionada !== '' || termoBusca !== '') && (
+                <button
+                  onClick={() => {
+                    setMesSelecionado('');
+                    setTipoSelecionado('');
+                    setCategoriaSelecionada('');
+                    setTermoBusca('');
+                  }}
+                  className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  Limpar filtros
+                </button>
+              )}
             </div>
 
             <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">

@@ -1,19 +1,29 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { AppLayout } from '@/components/AppLayout';
 import { ObjectiveCard } from '@/components/ObjectiveCard';
 import { StatCard } from '@/components/StatCard';
 import { ExportButton } from '@/components/ExportButton';
-import { NovoObjetivoModal } from '@/components/modals';
+import { NovoObjetivoModal, EditarObjetivoModal } from '@/components/modals';
 import { Target, TrendingUp, CheckCircle2, Clock, Search, Plus } from 'lucide-react';
 import { exportObjetivosToExcel } from '@/lib/export-excel';
 import { exportToPDF } from '@/lib/export-pdf';
 import { useObjetivos } from '@/hooks/useObjetivos';
 
 export default function ObjetivosPage() {
+  const router = useRouter();
   const [isNovoObjetivoModalOpen, setIsNovoObjetivoModalOpen] = useState(false);
-  const { objetivos, loading } = useObjetivos();
+  const [isEditarObjetivoModalOpen, setIsEditarObjetivoModalOpen] = useState(false);
+  const [objetivoSelecionado, setObjetivoSelecionado] = useState<any>(null);
+  const { objetivos, loading, refetch } = useObjetivos();
+
+  // Estados dos filtros
+  const [prazoSelecionado, setPrazoSelecionado] = useState<'curto' | 'medio' | 'longo' | ''>('');
+  const [prioridadeSelecionada, setPrioridadeSelecionada] = useState<'alta' | 'media' | 'baixa' | ''>('');
+  const [statusSelecionado, setStatusSelecionado] = useState<'nao-iniciado' | 'em-andamento' | 'concluido' | ''>('');
+  const [termoBusca, setTermoBusca] = useState('');
 
   // Converter dados do Supabase para o formato esperado pelo componente
   const objectives = objetivos.map(obj => {
@@ -58,11 +68,48 @@ export default function ObjetivosPage() {
       timeRemaining,
       recommendation,
       categoria: obj.categoria,
-      status: obj.status
+      status: obj.status,
+      prazoDate: prazoDate // Adicionar data para filtros
     };
   });
 
-  const totalObjectives = objectives.length;
+  // Aplicar filtros
+  const objectivesFiltrados = objectives.filter(obj => {
+    const hoje = new Date();
+    const diffTime = obj.prazoDate.getTime() - hoje.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    // Filtro de prazo
+    if (prazoSelecionado !== '') {
+      if (prazoSelecionado === 'curto' && diffDays >= 365) return false; // < 1 ano
+      if (prazoSelecionado === 'medio' && (diffDays < 365 || diffDays >= 1825)) return false; // 1-5 anos
+      if (prazoSelecionado === 'longo' && diffDays < 1825) return false; // >= 5 anos
+    }
+
+    // Filtro de prioridade
+    if (prioridadeSelecionada !== '') {
+      if (prioridadeSelecionada === 'alta' && obj.priority < 8) return false;
+      if (prioridadeSelecionada === 'media' && (obj.priority < 5 || obj.priority > 7)) return false;
+      if (prioridadeSelecionada === 'baixa' && obj.priority > 4) return false;
+    }
+
+    // Filtro de status
+    if (statusSelecionado !== '') {
+      const progresso = obj.current / obj.target;
+      if (statusSelecionado === 'nao-iniciado' && obj.current > 0) return false;
+      if (statusSelecionado === 'em-andamento' && (obj.current === 0 || progresso >= 1)) return false;
+      if (statusSelecionado === 'concluido' && progresso < 1) return false;
+    }
+
+    // Filtro de busca
+    if (termoBusca && !obj.title.toLowerCase().includes(termoBusca.toLowerCase())) {
+      return false;
+    }
+
+    return true;
+  });
+
+  const totalObjectives = objectivesFiltrados.length;
   const completedObjectives = objectives.filter(obj => (obj.current / obj.target) >= 1).length;
   const inProgressObjectives = objectives.filter(obj => obj.current > 0 && (obj.current / obj.target) < 1).length;
   const totalNeeded = objectives.reduce((sum, obj) => sum + obj.target, 0);
@@ -85,7 +132,7 @@ export default function ObjetivosPage() {
   }
 
   const handleExportExcel = () => {
-    const dadosExport = objectives.map(obj => ({
+    const dadosExport = objectivesFiltrados.map(obj => ({
       'Objetivo': obj.title,
       'Valor Atual': obj.current,
       'Valor Meta': obj.target,
@@ -99,6 +146,31 @@ export default function ObjetivosPage() {
 
   const handleExportPDF = async () => {
     await exportToPDF('objetivos-content', 'lifeplan-objetivos.pdf');
+  };
+
+  const handleEditarObjetivo = (objetivoId: string) => {
+    const objetivo = objetivos.find(obj => obj.id === objetivoId);
+    if (objetivo) {
+      setObjetivoSelecionado({
+        id: objetivo.id,
+        nome: objetivo.nome,
+        valor: objetivo.valor,
+        valorAtual: objetivo.valor_atual,
+        prioridade: objetivo.prioridade,
+        prazo: objetivo.prazo,
+        categoria: objetivo.categoria,
+        icone: objetivo.icone,
+      });
+      setIsEditarObjetivoModalOpen(true);
+    }
+  };
+
+  const handleVerCenarios = (objetivoId: string) => {
+    router.push(`/simulador?objetivo=${objetivoId}`);
+  };
+
+  const handleModalSuccess = () => {
+    refetch();
   };
 
   return (
@@ -138,25 +210,37 @@ export default function ObjetivosPage() {
             <div className="flex flex-col lg:flex-row lg:flex-wrap items-stretch lg:items-center gap-3 lg:gap-4">
               {/* Filtros */}
               <div className="flex-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 lg:gap-4">
-                <select className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
-                  <option>Todos os objetivos</option>
-                  <option>Curto prazo</option>
-                  <option>Médio prazo</option>
-                  <option>Longo prazo</option>
+                <select
+                  value={prazoSelecionado}
+                  onChange={(e) => setPrazoSelecionado(e.target.value as any)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                >
+                  <option value="">Todos os objetivos</option>
+                  <option value="curto">Curto prazo (&lt; 1 ano)</option>
+                  <option value="medio">Médio prazo (1-5 anos)</option>
+                  <option value="longo">Longo prazo (&gt; 5 anos)</option>
                 </select>
 
-                <select className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
-                  <option>Prioridade</option>
-                  <option>Alta (8-10)</option>
-                  <option>Média (5-7)</option>
-                  <option>Baixa (1-4)</option>
+                <select
+                  value={prioridadeSelecionada}
+                  onChange={(e) => setPrioridadeSelecionada(e.target.value as any)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                >
+                  <option value="">Todas as prioridades</option>
+                  <option value="alta">Alta (8-10)</option>
+                  <option value="media">Média (5-7)</option>
+                  <option value="baixa">Baixa (1-4)</option>
                 </select>
 
-                <select className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
-                  <option>Status</option>
-                  <option>Não iniciado</option>
-                  <option>Em andamento</option>
-                  <option>Concluído</option>
+                <select
+                  value={statusSelecionado}
+                  onChange={(e) => setStatusSelecionado(e.target.value as any)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                >
+                  <option value="">Todos os status</option>
+                  <option value="nao-iniciado">Não iniciado</option>
+                  <option value="em-andamento">Em andamento</option>
+                  <option value="concluido">Concluído</option>
                 </select>
 
                 {/* Campo de Busca */}
@@ -164,6 +248,8 @@ export default function ObjetivosPage() {
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <input
                     type="text"
+                    value={termoBusca}
+                    onChange={(e) => setTermoBusca(e.target.value)}
                     placeholder="Buscar objetivos..."
                     className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   />
@@ -172,6 +258,19 @@ export default function ObjetivosPage() {
 
               {/* Botões de Ação */}
               <div className="flex flex-col sm:flex-row gap-3 lg:w-auto w-full">
+                {(prazoSelecionado || prioridadeSelecionada || statusSelecionado || termoBusca) && (
+                  <button
+                    onClick={() => {
+                      setPrazoSelecionado('');
+                      setPrioridadeSelecionada('');
+                      setStatusSelecionado('');
+                      setTermoBusca('');
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    Limpar filtros
+                  </button>
+                )}
                 <ExportButton
                   onExportExcel={handleExportExcel}
                   onExportPDF={handleExportPDF}
@@ -188,28 +287,33 @@ export default function ObjetivosPage() {
           </div>
 
           {/* Lista de Objetivos */}
-          {objectives.length === 0 ? (
+          {objectivesFiltrados.length === 0 ? (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 lg:p-12 text-center">
               <div className="text-5xl lg:text-6xl mb-3 lg:mb-4">🎯</div>
               <h3 className="text-lg lg:text-xl font-semibold text-gray-900 mb-2">
-                Nenhum objetivo cadastrado
+                {objectives.length === 0 ? 'Nenhum objetivo cadastrado' : 'Nenhum objetivo encontrado'}
               </h3>
               <p className="text-sm lg:text-base text-gray-600 mb-4 lg:mb-6">
-                Comece definindo seus objetivos financeiros e acompanhe seu progresso
+                {objectives.length === 0
+                  ? 'Comece definindo seus objetivos financeiros e acompanhe seu progresso'
+                  : 'Tente ajustar os filtros para ver outros objetivos'}
               </p>
-              <button
-                onClick={() => setIsNovoObjetivoModalOpen(true)}
-                className="inline-flex items-center gap-2 px-5 py-2.5 lg:px-6 lg:py-3 bg-primary-600 text-white text-sm lg:text-base font-medium rounded-lg hover:bg-primary-700 transition-colors"
-              >
-                <Plus className="w-4 h-4 lg:w-5 lg:h-5" />
-                Criar Primeiro Objetivo
-              </button>
+              {objectives.length === 0 && (
+                <button
+                  onClick={() => setIsNovoObjetivoModalOpen(true)}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 lg:px-6 lg:py-3 bg-primary-600 text-white text-sm lg:text-base font-medium rounded-lg hover:bg-primary-700 transition-colors"
+                >
+                  <Plus className="w-4 h-4 lg:w-5 lg:h-5" />
+                  Criar Primeiro Objetivo
+                </button>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
-              {objectives.map((objective) => (
+              {objectivesFiltrados.map((objective) => (
                 <ObjectiveCard
                   key={objective.id}
+                  id={objective.id}
                   title={objective.title}
                   icon={objective.icon}
                   current={objective.current}
@@ -217,6 +321,8 @@ export default function ObjetivosPage() {
                   priority={objective.priority}
                   timeRemaining={objective.timeRemaining}
                   recommendation={objective.recommendation}
+                  onEdit={() => handleEditarObjetivo(objective.id)}
+                  onViewScenarios={() => handleVerCenarios(objective.id)}
                 />
               ))}
             </div>
@@ -254,7 +360,21 @@ export default function ObjetivosPage() {
       <NovoObjetivoModal
         isOpen={isNovoObjetivoModalOpen}
         onClose={() => setIsNovoObjetivoModalOpen(false)}
+        onSuccess={handleModalSuccess}
       />
+
+      {/* Modal Editar Objetivo */}
+      {objetivoSelecionado && (
+        <EditarObjetivoModal
+          isOpen={isEditarObjetivoModalOpen}
+          onClose={() => {
+            setIsEditarObjetivoModalOpen(false);
+            setObjetivoSelecionado(null);
+          }}
+          objetivo={objetivoSelecionado}
+          onSuccess={handleModalSuccess}
+        />
+      )}
     </AppLayout>
   );
 }
