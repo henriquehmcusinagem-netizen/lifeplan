@@ -230,6 +230,7 @@ export default function DashboardPage() {
         }
 
         return {
+          id: obj.id,
           title: obj.nome,
           icon: obj.icone || '🎯',
           current: obj.valor_atual,
