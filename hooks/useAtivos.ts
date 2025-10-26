@@ -83,9 +83,38 @@ export function useAtivos() {
   const updateAtivo = async (id: string, data: Partial<AtivoFormData>) => {
     if (!user) throw new Error('User not authenticated');
 
+    // Converter camelCase para snake_case para o Supabase
+    const dataToUpdate: any = {
+      nome: data.nome,
+      valor_estimado: data.valorEstimado,
+      vendabilidade: data.vendabilidade,
+      tipo: data.tipo,
+      descricao: data.descricao,
+    };
+
+    // Adicionar metadados específicos por tipo
+    const metadados: any = {};
+    if (data.tipo === 'imovel') {
+      metadados.endereco = data.endereco;
+      metadados.metragem = data.metragem;
+      metadados.ano = data.ano;
+      metadados.tipoImovel = data.tipoImovel;
+    } else if (data.tipo === 'veiculo') {
+      metadados.modelo = data.modelo;
+      metadados.placa = data.placa;
+      metadados.ano = data.ano;
+      metadados.tipoVeiculo = data.tipoVeiculo;
+    } else if (data.tipo === 'investimento') {
+      metadados.tipoInvestimento = data.tipoInvestimento;
+      metadados.rentabilidadeAnual = data.rentabilidadeAnual;
+      metadados.instituicao = data.instituicao;
+    }
+
+    dataToUpdate.metadados = metadados;
+
     const { error } = await supabase
       .from('ativos')
-      .update(data)
+      .update(dataToUpdate)
       .eq('id', id)
       .eq('user_id', user.id);
 
